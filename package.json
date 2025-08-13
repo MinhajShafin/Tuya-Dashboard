@@ -2,13 +2,13 @@
   "name": "tuya-smart-plug-dashboard",
   "version": "1.0.0",
   "description": "Real-time dashboard for Tuya smart plug monitoring",
-  "main": "server.js",
+  "main": "server-multi.js",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "nodemon server.js",
+    "server": "nodemon server-multi.js",
     "client": "cd client && npm start",
     "build": "cd client && npm run build",
-    "start": "node server.js"
+    "start": "node server-multi.js"
   },
   "dependencies": {
     "express": "^4.18.2",
