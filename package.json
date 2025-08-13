@@ -1,0 +1,36 @@
+{
+  "name": "tuya-smart-plug-dashboard",
+  "version": "1.0.0",
+  "description": "Real-time dashboard for Tuya smart plug monitoring",
+  "main": "server.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "nodemon server.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "tuyapi": "^7.6.0",
+    "ws": "^8.14.2",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^16.3.1",
+    "fs": "^0.0.1-security",
+    "path": "^0.12.7"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1",
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "tuya",
+    "smart-plug",
+    "dashboard",
+    "react",
+    "real-time"
+  ],
+  "author": "",
+  "license": "MIT"
+}
