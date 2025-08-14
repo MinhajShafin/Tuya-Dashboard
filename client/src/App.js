@@ -950,7 +950,7 @@ const App = () => {
     <div className="dashboard">
       <div className="header">
         <div className="header-content">
-          <h1>Tuya Multi-Device Dashboard</h1>
+          <h1>Multi-Device Dashboard</h1>
           <button
             className="installation-guide-btn"
             onClick={openInstallationGuide}
