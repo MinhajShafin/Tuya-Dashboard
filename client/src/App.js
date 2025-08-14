@@ -138,7 +138,7 @@ const HistoricalDataViewer = ({ device, historicalData }) => {
 
   return (
     <div className="historical-data-section">
-      <h4 className="historical-title">📊 Historical Power Usage</h4>
+      <h4 className="historical-title">Historical Power Usage</h4>
 
       {/* Quick Range Buttons */}
       <div className="quick-range-buttons">
@@ -366,8 +366,19 @@ const DeviceListItem = React.memo(
     };
 
     return (
-      <div className={`device-list-item ${isExpanded ? "expanded" : ""}`}>
-        <div className="device-summary" onClick={() => onExpand(device.id)}>
+      <div
+        className={`device-list-item ${isExpanded ? "expanded" : ""}`}
+        onClick={() => onExpand(device.id)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onExpand(device.id);
+          }
+        }}
+      >
+        <div className="device-summary">
           <div className="device-basic-info">
             <div className="device-name-room">
               <h3>{device.name}</h3>
@@ -385,18 +396,24 @@ const DeviceListItem = React.memo(
               <span className="status-text">{getStatusText()}</span>
             </div>
 
-            <div className="quick-controls">
+            <div
+              className="quick-controls"
+              onClick={(e) => e.stopPropagation()}
+            >
               <button
                 className={`toggle-btn-small ${
                   device.power_state ? "on" : "off"
                 }`}
                 onClick={(e) => {
                   e.stopPropagation();
+                  console.log("Toggle button clicked for device:", device.id);
                   onToggle(device.id);
                 }}
-                disabled={!device.connected}
+                disabled={device.connected === false}
+                data-state={device.power_state ? "ON" : "OFF"}
+                title={`Turn ${device.power_state ? "OFF" : "ON"}`}
               >
-                {device.power_state ? "OFF" : "ON"}
+                {/* Visual toggle switch - text shown via CSS */}
               </button>
             </div>
 
@@ -447,7 +464,7 @@ const DeviceListItem = React.memo(
             {device.connected && (
               <div className="billing-section">
                 <h4 className="billing-title">
-                  💰 Billing Information (Bangladesh)
+                  Billing Information (Bangladesh)
                 </h4>
                 <div className="billing-grid">
                   <div className="billing-item">
@@ -462,28 +479,6 @@ const DeviceListItem = React.memo(
                     <span className="billing-label">Real-time Cost/Hour</span>
                     <span className="billing-value billing-realtime">
                       ৳{calculateRealTimeCost(device.power || 0).toFixed(2)}/hr
-                    </span>
-                  </div>
-                  <div className="billing-item">
-                    <span className="billing-label">Daily Estimate</span>
-                    <span className="billing-value billing-daily">
-                      ৳
-                      {(calculateRealTimeCost(device.power || 0) * 24).toFixed(
-                        2
-                      )}
-                      /day
-                    </span>
-                  </div>
-                  <div className="billing-item">
-                    <span className="billing-label">Monthly Estimate</span>
-                    <span className="billing-value billing-monthly">
-                      ৳
-                      {(
-                        calculateRealTimeCost(device.power || 0) *
-                        24 *
-                        30
-                      ).toFixed(2)}
-                      /month
                     </span>
                   </div>
                 </div>
@@ -824,9 +819,22 @@ const App = () => {
   }, [searchTerm]);
 
   const toggleDevice = (deviceId) => {
+    console.log("toggleDevice called for:", deviceId);
+    console.log("WebSocket state:", ws ? ws.readyState : "no websocket");
+
     if (ws && ws.readyState === WebSocket.OPEN) {
       console.log("Sending toggle command for device:", deviceId);
       ws.send(JSON.stringify({ type: "toggle", deviceId }));
+    } else {
+      console.warn("WebSocket not ready, cannot send toggle command");
+      // Fallback: try REST API
+      fetch(`/api/devices/${deviceId}/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+        .then((response) => response.json())
+        .then((data) => console.log("REST toggle result:", data))
+        .catch((error) => console.error("REST toggle failed:", error));
     }
   };
 
@@ -948,9 +956,10 @@ const App = () => {
 
   return (
     <div className="dashboard">
+      {/* Header (kept full width) */}
       <div className="header">
         <div className="header-content">
-          <h1>Multi-Device Dashboard</h1>
+          <h1>Smart Home Device Dashboard</h1>
           <button
             className="installation-guide-btn"
             onClick={openInstallationGuide}
@@ -958,163 +967,187 @@ const App = () => {
             Installation Guide
           </button>
         </div>
-        <div className="dashboard-stats">
-          <div className="stat">
-            <span className="stat-value">{connectedDevices}</span>
-            <span className="stat-label">Connected</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{enabledDevices}</span>
-            <span className="stat-label">Enabled</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{disabledDevices}</span>
-            <span className="stat-label">Disabled</span>
-          </div>
-          <div className="stat">
-            <span className="stat-value">{totalDevices}</span>
-            <span className="stat-label">Total</span>
-          </div>
+      </div>
+
+      <div className="dashboard-layout">
+        {/* LEFT: Devices */}
+        <div className="devices-column">
+          {devices.length === 0 ? (
+            <div className="no-devices">
+              <h3>No devices configured</h3>
+              <p>Click "Add Device" to start monitoring your Tuya devices</p>
+            </div>
+          ) : filteredDevices.length === 0 ? (
+            <div className="no-devices">
+              <h3>No devices match your search criteria</h3>
+              <p>Try adjusting your search term or filters</p>
+            </div>
+          ) : (
+            <div className="devices-list">
+              {filteredDevices.map((device) => (
+                <DeviceListItem
+                  key={device.id}
+                  device={device}
+                  onToggle={toggleDevice}
+                  onRemove={removeDevice}
+                  isExpanded={expandedDevices.has(device.id)}
+                  onExpand={toggleExpanded}
+                  historicalData={historicalData.get(device.id) || []}
+                />
+              ))}
+            </div>
+          )}
+
+          {selectedDevice && historicalData.get(selectedDevice.id) && (
+            <div className="chart-section">
+              <h3>
+                Historical Data -{" "}
+                {devices.find((d) => d.id === selectedDevice.id)?.name}
+              </h3>
+              <div className="chart-container">
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={historicalData.get(selectedDevice.id)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis
+                      dataKey="time"
+                      interval="preserveStartEnd"
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                      tick={{ fontSize: 12 }}
+                    />
+                    <YAxis yAxisId="left" />
+                    <YAxis yAxisId="right" orientation="right" />
+                    <Tooltip labelFormatter={(label) => `Time: ${label}`} />
+                    <Legend />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="power"
+                      stroke="#8884d8"
+                      strokeWidth={2}
+                      name="Power (W)"
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="voltage"
+                      stroke="#82ca9d"
+                      strokeWidth={2}
+                      name="Voltage (V)"
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="current"
+                      stroke="#ffc658"
+                      strokeWidth={2}
+                      name="Current (mA)"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
 
-      <div className="dashboard-actions">
-        <button className="action-button" onClick={() => setShowAddModal(true)}>
-          Add Device
-        </button>
-        <button className="action-button" onClick={refreshData}>
-          Refresh All
-        </button>
-        <button
-          className={`action-button ${showDisabledDevices ? "active" : ""}`}
-          onClick={() => setShowDisabledDevices(!showDisabledDevices)}
-          title={
-            showDisabledDevices
-              ? "Hide disabled devices"
-              : "Show disabled devices"
-          }
-        >
-          {showDisabledDevices ? "Hide" : "Show"} Disabled ({disabledDevices})
-        </button>
-      </div>
-
-      {devices.length > 0 && (
-        <div className="device-filters">
-          <div className="search-container">
-            <div className="search-input-wrapper">
-              <input
-                type="text"
-                placeholder="Search devices by name, room, type, or ID... (Press Escape to clear)"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="search-input"
-              />
-              {searchTerm && (
+        {/* RIGHT: Controls & Stats */}
+        <div className="controls-column">
+          <div className="controls-panel">
+            <div className="panel-section">
+              <h4 className="panel-title">Actions</h4>
+              <div className="dashboard-actions stacked">
                 <button
-                  className="clear-search"
-                  onClick={() => setSearchTerm("")}
-                  title="Clear search"
+                  className="action-button"
+                  onClick={() => setShowAddModal(true)}
                 >
-                  ×
+                  Add Device
                 </button>
-              )}
-            </div>
-          </div>
-          <div className="filter-controls">
-            <div className="results-count">
-              Showing {filteredDevices.length} of {totalDevices} devices
-            </div>
-            {filteredDevices.length > 0 && (
-              <div className="expand-controls">
-                <button className="expand-btn" onClick={expandAll}>
-                  Expand All
+                <button className="action-button" onClick={refreshData}>
+                  Refresh All
                 </button>
-                <button className="expand-btn" onClick={collapseAll}>
-                  Collapse All
+                <button
+                  className={`action-button ${
+                    showDisabledDevices ? "active" : ""
+                  }`}
+                  onClick={() => setShowDisabledDevices(!showDisabledDevices)}
+                  title={
+                    showDisabledDevices
+                      ? "Hide disabled devices"
+                      : "Show disabled devices"
+                  }
+                >
+                  {showDisabledDevices ? "Hide" : "Show"} Disabled (
+                  {disabledDevices})
                 </button>
               </div>
+            </div>
+
+            {devices.length > 0 && (
+              <div className="panel-section device-filters inline-embed">
+                <h4 className="panel-title">Search & Filter</h4>
+                <div className="search-container">
+                  <div className="search-input-wrapper">
+                    <input
+                      type="text"
+                      placeholder="Search devices (Esc to clear)"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="search-input"
+                    />
+                    {searchTerm && (
+                      <button
+                        className="clear-search"
+                        onClick={() => setSearchTerm("")}
+                        title="Clear search"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="filter-controls single-row">
+                  <div className="results-count">
+                    {filteredDevices.length} / {totalDevices} shown
+                  </div>
+                  {filteredDevices.length > 0 && (
+                    <div className="expand-controls">
+                      <button className="expand-btn" onClick={expandAll}>
+                        Expand All
+                      </button>
+                      <button className="expand-btn" onClick={collapseAll}>
+                        Collapse All
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
+
+            <div className="panel-section">
+              <h4 className="panel-title">Stats</h4>
+              <div className="dashboard-stats side compact">
+                <div className="stat">
+                  <span className="stat-value">{connectedDevices}</span>
+                  <span className="stat-label">Connected</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-value">{enabledDevices}</span>
+                  <span className="stat-label">Enabled</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-value">{disabledDevices}</span>
+                  <span className="stat-label">Disabled</span>
+                </div>
+                <div className="stat">
+                  <span className="stat-value">{totalDevices}</span>
+                  <span className="stat-label">Total</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      )}
-
-      {devices.length === 0 ? (
-        <div className="no-devices">
-          <h3>No devices configured</h3>
-          <p>Click "Add Device" to start monitoring your Tuya devices</p>
-        </div>
-      ) : filteredDevices.length === 0 ? (
-        <div className="no-devices">
-          <h3>No devices match your search criteria</h3>
-          <p>Try adjusting your search term or filters</p>
-        </div>
-      ) : (
-        <div className="devices-list">
-          {filteredDevices.map((device) => (
-            <DeviceListItem
-              key={device.id}
-              device={device}
-              onToggle={toggleDevice}
-              onRemove={removeDevice}
-              isExpanded={expandedDevices.has(device.id)}
-              onExpand={toggleExpanded}
-              historicalData={historicalData.get(device.id) || []}
-            />
-          ))}
-        </div>
-      )}
-
-      {selectedDevice && historicalData.get(selectedDevice.id) && (
-        <div className="chart-section">
-          <h3>
-            Historical Data -{" "}
-            {devices.find((d) => d.id === selectedDevice.id)?.name}
-          </h3>
-          <div className="chart-container">
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={historicalData.get(selectedDevice.id)}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="time"
-                  interval="preserveStartEnd"
-                  angle={-45}
-                  textAnchor="end"
-                  height={60}
-                  tick={{ fontSize: 12 }}
-                />
-                <YAxis yAxisId="left" />
-                <YAxis yAxisId="right" orientation="right" />
-                <Tooltip labelFormatter={(label) => `Time: ${label}`} />
-                <Legend />
-                <Line
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="power"
-                  stroke="#8884d8"
-                  strokeWidth={2}
-                  name="Power (W)"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="voltage"
-                  stroke="#82ca9d"
-                  strokeWidth={2}
-                  name="Voltage (V)"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="current"
-                  stroke="#ffc658"
-                  strokeWidth={2}
-                  name="Current (mA)"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+      </div>
 
       <AddDeviceModal
         isOpen={showAddModal}
